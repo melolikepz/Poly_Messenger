@@ -17,7 +17,9 @@ A real-time chat application developed using Python and PyQt6, featuring live me
 ## 🚀 How to Run  
 1. Clone the repository:  
    ```bash
-   git clone <https://github.com/alitkbbl/Poly_Messenger.git>
+   git clone https://github.com/alitkbbl/Poly_Messenger.git
    pip install -r requirements.txt
    python main.py
+
+
 
