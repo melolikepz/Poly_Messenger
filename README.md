@@ -6,9 +6,8 @@ A real-time chat application developed using Python and PyQt6, featuring live me
 - **Real-Time Chat** (Using sockets & multithreading)  
 - **Contact Management** (Adding & validating contacts)  
 - **Profile & Settings** (Edit username, phone, password, and profile picture)  
-- **Secure Database Storage** (For user data)  
-- **Clean Code & OOP Principles** (Adhering to SOLID & UML design)  
-
+- **Secure Database Storage** (For user data)
+  
 ## 🔧 Technologies Used  
 - Python (PyQt6, threading, socket)  
 - Database (PostgreSQL)  
@@ -18,7 +17,7 @@ A real-time chat application developed using Python and PyQt6, featuring live me
 ## 🚀 How to Run  
 1. Clone the repository:  
    ```bash
-   git clone <repo-link>
+   git clone <https://github.com/alitkbbl/Poly_Messenger.git>
    pip install -r requirements.txt
    python main.py
 
