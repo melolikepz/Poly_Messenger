@@ -2,9 +2,9 @@ import socket
 import sys
 import time
 from PyQt6.QtWidgets import QApplication, QMessageBox
-from client.client import ClientThread
+from client import ClientThread
 from client.ui import LoginWindow, ChatWindow
-from database.db import init_db, add_user, check_user
+from database import init_db, add_user, check_user
 
 
 class MessengerApp:
