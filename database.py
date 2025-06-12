@@ -198,7 +198,19 @@ class DatabaseManager:
         self.session.close()
 
 
+# db = DatabaseManager()
+
+# db.add_user("aria", "Aria1234!", "09123456789")
+
+# user = db.verify_user("aria", "Aria1234!")
+
+# db.add_contact(user.id, "hamid")
+
+# db.add_message(sender_id=user.id, receiver_id=2, content="hy hamid")
+
+# messages = db.get_messages_between_users(user.id, 2)
 
 if __name__ == "__main__":
     db = DatabaseManager()
+
 
