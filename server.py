@@ -1,141 +1,96 @@
-# server.py
 import socket
 import threading
-import json
-import shutil
-import os
-from database import create_connection
 
-def get_user_id(username):
-    conn = create_connection()
-    c = conn.cursor()
-    c.execute("SELECT id FROM users WHERE username=?", (username,))
-    result = c.fetchone()
-    conn.close()
-    return result[0] if result else None
+HOST = '0.0.0.0'
+PORT = 1234
 
-def handle_signup(data):
-    conn = create_connection()
-    c = conn.cursor()
-    try:
-        c.execute("SELECT * FROM users WHERE username=? OR phone=?", (data['username'], data['phone']))
-        if c.fetchone():
-            return "User already exists."
+client_handlers = []
+handlers_lock = threading.Lock()
 
-        profile_path = ""
-        if data['profile_pic']:
-            profile_path = os.path.join("profiles", os.path.basename(data['profile_pic']))
-            os.makedirs("profiles", exist_ok=True)
-            shutil.copyfile(data['profile_pic'], profile_path)
+class ClientHandler(threading.Thread):
+    def __init__(self, conn: socket.socket, addr):
+        super().__init__(daemon=True)
+        self.conn = conn
+        self.addr = addr
+        self.name = None
+        self.reader = conn.makefile('r', encoding='utf-8')
+        self.writer = conn.makefile('w', encoding='utf-8')
 
-        c.execute("INSERT INTO users (username, phone, password, profile_pic) VALUES (?, ?, ?, ?)",
-                  (data['username'], data['phone'], data['password'], profile_path))
-        conn.commit()
-        return "User registered successfully."
-    except Exception as e:
-        return f"Error: {e}"
-    finally:
-        conn.close()
+    def run(self):
+        try:
+            # get username
+            self.name = self.reader.readline().strip()
+            if not self.name:
+                return
 
-def handle_signin(data):
-    conn = create_connection()
-    c = conn.cursor()
-    try:
-        c.execute("SELECT * FROM users WHERE username=? AND password=?", (data['username'], data['password']))
-        user = c.fetchone()
-        if user:
-            return "Login successful"
-        else:
-            return "Invalid username or password"
-    except Exception as e:
-        return f"Error: {e}"
-    finally:
-        conn.close()
+            with handlers_lock:
+                client_handlers.append(self)
 
-def handle_get_users(data):
-    conn = create_connection()
-    c = conn.cursor()
-    try:
-        current_username = data['username']
-        c.execute("SELECT username FROM users WHERE username != ?", (current_username,))
-        users = [row[0] for row in c.fetchall()]
-        return users
-    except Exception as e:
-        return {"error": str(e)}
-    finally:
-        conn.close()
+            self.broadcast_message(f"🔵 {self.name} has joined the chat.")
 
-def handle_send_message(data):
-    conn = create_connection()
-    c = conn.cursor()
-    try:
-        sender_id = get_user_id(data['from'])
-        receiver_id = get_user_id(data['to'])
+            while True:
+                line = self.reader.readline()
+                if not line:
+                    break
+                message = line.strip()
+                if message:
+                    self.broadcast_message(f"[{self.name}] {message}")
 
-        c.execute("INSERT INTO messages (sender_id, receiver_id, message) VALUES (?, ?, ?)",
-                  (sender_id, receiver_id, data['message']))
-        conn.commit()
-        return "Message sent"
-    except Exception as e:
-        return f"Error: {e}"
-    finally:
-        conn.close()
+        except Exception as e:
+            print(f"[ERROR] {self.addr}: {e}")
+        finally:
+            self.remove_handler_and_close()
 
-def handle_receive_messages(data):
-    conn = create_connection()
-    c = conn.cursor()
-    try:
-        sender_id = get_user_id(data['from'])
-        receiver_id = get_user_id(data['to'])
+    def broadcast_message(self, message: str):
+        with handlers_lock:
+            for handler in client_handlers.copy():
+                try:
+                    handler.writer.write(message + "\n")
+                    handler.writer.flush()
+                except:
+                    handler.remove_handler_and_close()
 
-        c.execute('''
-            SELECT u.username, m.message
-            FROM messages m
-            JOIN users u ON u.id = m.sender_id
-            WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?)
-            ORDER BY timestamp ASC
-        ''', (sender_id, receiver_id, receiver_id, sender_id))
+    def remove_handler_and_close(self):
+        with handlers_lock:
+            if self in client_handlers:
+                client_handlers.remove(self)
 
-        rows = c.fetchall()
-        messages = [{"sender": row[0], "text": row[1]} for row in rows]
-        return messages
-    except Exception as e:
-        return [{"sender": "System", "text": f"Error: {e}"}]
-    finally:
-        conn.close()
+        try:
+            self.reader.close()
+            self.writer.close()
+            self.conn.close()
+        except:
+            pass
 
-def handle_client(conn, addr):
-    data = conn.recv(4096).decode()
-    if not data:
-        return
-    request = json.loads(data)
+        if self.name:
+            self.broadcast_message(f"🔴 {self.name} has left the chat.")
+        print(f"[INFO] Closed connection: {self.addr} ({self.name})")
 
-    if request.get("type") == "signup":
-        response = handle_signup(request)
-        conn.send(response.encode())
-    elif request.get("type") == "signin":
-        response = handle_signin(request)
-        conn.send(response.encode())
-    elif request.get("type") == "get_users":
-        response = handle_get_users(request)
-        conn.send(json.dumps(response).encode())
-    elif request.get("type") == "send_message":
-        response = handle_send_message(request)
-        conn.send(response.encode())
-    elif request.get("type") == "receive_messages":
-        response = handle_receive_messages(request)
-        conn.send(json.dumps(response).encode())
-
-    conn.close()
 
 def start_server():
-    s = socket.socket()
-    s.bind(("localhost", 12345))
-    s.listen()
-    print("Server is running...")
-    while True:
-        conn, addr = s.accept()
-        threading.Thread(target=handle_client, args=(conn, addr)).start()
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_sock:
+        try:
+            server_sock.bind((HOST, PORT))
+            server_sock.listen()
+            print(f"[✅ SERVER] Group chat server is running on {HOST}:{PORT}...")
+        except OSError as e:
+            print(f"[❌ ERROR] Could not bind to port {PORT}: {e}")
+            return
 
-if __name__ == "__main__":
+        try:
+            while True:
+                conn, addr = server_sock.accept()
+                print(f"[NEW] Connection from {addr}")
+                handler = ClientHandler(conn, addr)
+                handler.start()
+        except KeyboardInterrupt:
+            print("\n[⛔️ SERVER] Shutdown requested.")
+        finally:
+            with handlers_lock:
+                for handler in client_handlers.copy():
+                    handler.remove_handler_and_close()
+            print("[SERVER] All connections closed.")
+
+
+if __name__ == '__main__':
     start_server()

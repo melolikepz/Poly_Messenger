@@ -1,131 +1,190 @@
-import socket
 import sys
-import time
-from PyQt6.QtWidgets import QApplication, QMessageBox
-from client import ClientThread
-from client.ui import LoginWindow, ChatWindow
-from database import init_db, add_user, check_user
+import socket
+import threading
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QLineEdit, QTextEdit, QPushButton, QMessageBox
+)
+from PyQt6.QtCore import pyqtSignal, QThread
 
 
-class MessengerApp:
-    def __init__(self):
-        # Initialize database
-        init_db()
+SERVER_HOST = '127.0.0.1'
+SERVER_PORT = 1234
 
-        # Create Qt application
-        self.app = QApplication(sys.argv)
 
-        # Create login window
-        self.login_window = LoginWindow()
-        self.login_window.login_btn.clicked.connect(self.handle_login)
-        self.login_window.register_btn.clicked.connect(self.handle_register)
+class ReceiverThread(QThread):
+    message_received = pyqtSignal(str)
 
-        # Initialize chat variables
-        self.chat_window = None
-        self.client_thread = None
-        self.current_username = None
-
-    def handle_login(self):
-        """Handle login button click"""
-        username = self.login_window.username_input.text()
-        password = self.login_window.password_input.text()
-
-        if not username or not password:
-            QMessageBox.warning(self.login_window, "خطا", "نام کاربری و رمز عبور نمی‌توانند خالی باشند!")
-            return
-
-        if check_user(username, password):
-            self.current_username = username
-            self.start_chat()
-        else:
-            QMessageBox.warning(self.login_window, "خطا", "نام کاربری یا رمز عبور اشتباه است!")
-
-    def handle_register(self):
-        """Handle register button click"""
-        username = self.login_window.username_input.text()
-        password = self.login_window.password_input.text()
-
-        if not username or not password:
-            QMessageBox.warning(self.login_window, "خطا", "نام کاربری و رمز عبور نمی‌توانند خالی باشند!")
-            return
-
-        if add_user(username, password):
-            QMessageBox.information(self.login_window, "موفق", "ثبت نام با موفقیت انجام شد!")
-        else:
-            QMessageBox.warning(self.login_window, "خطا", "نام کاربری تکراری است!")
-
-    def start_chat(self):
-        """Start chat session"""
-        self.login_window.hide()
-
-        # Create chat window
-        self.chat_window = ChatWindow(self.current_username)
-
-        # Setup client thread
-        self.client_thread = ClientThread('127.0.0.1', 1234)
-        self.client_thread.new_message.connect(self.show_message)
-        self.client_thread.start()
-
-        # Wait for connection
-        if not self.wait_for_connection():
-            QMessageBox.critical(self.chat_window, "خطا", "اتصال به سرور برقرار نشد!")
-            self.chat_window.close()
-            self.login_window.show()
-            return
-
-        # Set username after connection is established
-        self.client_thread.set_username(self.current_username)
-
-        # Connect send button
-        self.chat_window.send_btn.clicked.connect(self.send_message)
-
-        # Connect window close event
-        self.chat_window.closeEvent = self.close_chat
-
-        self.chat_window.show()
-
-    def wait_for_connection(self, timeout=5):
-        """Wait for socket connection"""
-        start_time = time.time()
-        while not hasattr(self.client_thread, 'connected') or not self.client_thread.connected:
-            if time.time() - start_time > timeout:
-                return False
-            time.sleep(0.1)
-            QApplication.processEvents()  # Keep UI responsive
-        return True
-
-    def show_message(self, message):
-        """Display new message in chat window"""
-        self.chat_window.chat_display.append(message)
-
-    def send_message(self):
-        """Send message to server"""
-        message = self.chat_window.message_input.text()
-        if message:
-            self.client_thread.send_message(message)
-            self.chat_window.message_input.clear()
-
-    def close_chat(self, event):
-        """Handle chat window closing"""
-        if self.client_thread:
-            self.client_thread.close_connection()
-        event.accept()
+    def __init__(self, sock):
+        super().__init__()
+        self.sock = sock
+        self.running = True
 
     def run(self):
-        """Run the application"""
-        self.login_window.show()
-        sys.exit(self.app.exec())
+        while self.running:
+            try:
+                msg = self.sock.recv(1024).decode('utf-8')
+                if msg:
+                    self.message_received.emit(msg.strip())
+                else:
+                    break
+            except:
+                break
+
+    def stop(self):
+        self.running = False
+        self.quit()
 
 
-if __name__ == "__main__":
-    # Check if server is running
-    try:
-        test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        test_socket.connect(('127.0.0.1', 1234))
-        test_socket.close()
-    except:
-        QMessageBox.critical(None, "خطا", "سرور در حال اجرا نیست! لطفاً اول سرور را اجرا کنید.")
-        sys.exit(1)
+class ChatWindow(QWidget):
+    def __init__(self, sock, username):
+        super().__init__()
+        self.sock = sock
+        self.username = username
+        self.setWindowTitle(f"💬 Group Chat - {username}")
+        self.setMinimumWidth(450)
 
-    app = MessengerApp()
-    app.run()
+        self.chat_display = QTextEdit()
+        self.chat_display.setReadOnly(True)
+
+        self.message_input = QLineEdit()
+        self.send_button = QPushButton("📤 Send")
+
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel(f"🟢 Logged in as: {username}"))
+        layout.addWidget(self.chat_display)
+
+        input_layout = QHBoxLayout()
+        input_layout.addWidget(self.message_input)
+        input_layout.addWidget(self.send_button)
+        layout.addLayout(input_layout)
+
+        self.setLayout(layout)
+
+        self.send_button.clicked.connect(self.send_message)
+        self.message_input.returnPressed.connect(self.send_message)
+
+        self.setStyleSheet("""
+            QTextEdit, QLineEdit {
+                font-size: 14px;
+                padding: 8px;
+                border-radius: 10px;
+                border: 1px solid #ccc;
+            }
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                font-weight: bold;
+                padding: 8px 15px;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+
+        # Receiver thread
+        self.receiver = ReceiverThread(self.sock)
+        self.receiver.message_received.connect(self.display_message)
+        self.receiver.start()
+
+    def send_message(self):
+        msg = self.message_input.text().strip()
+        if msg:
+            try:
+                self.sock.sendall((msg + '\n').encode('utf-8'))
+                self.message_input.clear()
+            except:
+                QMessageBox.critical(self, "Error", "Disconnected from server.")
+
+    def display_message(self, msg):
+        self.chat_display.append(msg)
+
+    def closeEvent(self, event):
+        try:
+            self.receiver.stop()
+            self.sock.close()
+        except:
+            pass
+        event.accept()
+
+
+class LoginWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("🔐 Login to Group Chat")
+        self.setFixedWidth(350)
+
+        self.username_input = QLineEdit()
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.login_button = QPushButton("🚀 Login")
+
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel("👤 Username:"))
+        layout.addWidget(self.username_input)
+        layout.addWidget(QLabel("🔑 Password:"))
+        layout.addWidget(self.password_input)
+        layout.addWidget(self.login_button)
+        self.setLayout(layout)
+
+        self.login_button.clicked.connect(self.connect_to_server)
+
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #f0f0f0;
+                font-family: Arial;
+            }
+            QLineEdit {
+                padding: 8px;
+                font-size: 14px;
+                border-radius: 8px;
+                border: 1px solid #aaa;
+            }
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                font-size: 14px;
+                padding: 8px;
+                border-radius: 8px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QLabel {
+                font-weight: bold;
+                margin-top: 10px;
+            }
+        """)
+
+    def connect_to_server(self):
+        username = self.username_input.text().strip()
+        password = self.password_input.text().strip()
+
+        if not username or not password:
+            QMessageBox.warning(self, "Input Error", "Please enter username and password.")
+            return
+
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((SERVER_HOST, SERVER_PORT))
+            sock.sendall((username + '\n').encode('utf-8'))
+
+            # Go to chat window
+            self.chat_window = ChatWindow(sock, username)
+            self.chat_window.show()
+            self.close()
+        except Exception as e:
+            QMessageBox.critical(self, "Connection Failed", str(e))
+
+
+def main():
+    app = QApplication(sys.argv)
+    login = LoginWindow()
+    login.show()
+    sys.exit(app.exec())
+
+
+if __name__ == '__main__':
+    main()
