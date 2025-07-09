@@ -445,7 +445,6 @@ class SignupWindow(QWidget):
             return
         QMessageBox.information(self,"Registered","Account created. Now sign in.")
         self.goto_login()
-
 def main():
     app = QApplication(sys.argv)
     win = LoginWindow()
