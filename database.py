@@ -210,6 +210,8 @@ class DatabaseManager:
 
 # messages = db.get_messages_between_users(user.id, 2)
 
+# messages = db.get_messages_between_users(user.id, 2)
+
 if __name__ == "__main__":
     db = DatabaseManager()
 
