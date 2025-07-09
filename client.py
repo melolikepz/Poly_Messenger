@@ -1,8 +1,14 @@
 import sys
 import socket
+import os
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QPixmap, QFont
+from PyQt6.QtGui import QIcon
+
+
+print(os.path.abspath("Contact.png"))
+print(os.path.abspath("setting.png"))
 
 SERVER_HOST = '127.0.0.1'
 SERVER_PORT = 1234
@@ -128,7 +134,7 @@ class SettingsDialog(QDialog):
             self.mainwin.logout_and_return()
 
 class ContactCard(QWidget):
-    def __init__(self, username, phone, avatar="Contact.png"):
+    def __init__(self, username, phone, avatar="/Users/melika/Poly_Messenger/Contact.png"):
         super().__init__()
         self.username = username
         self.phone = phone
@@ -144,7 +150,7 @@ class ContactCard(QWidget):
         """)
         lyt = QHBoxLayout(self)
         img = QLabel()
-        img.setPixmap(QPixmap("Contact.png").scaled(48,48, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        img.setPixmap(QPixmap("/Users/melika/Poly_Messenger/Contact.png").scaled(48,48, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         lyt.addWidget(img)
         vtxt = QVBoxLayout()
         vtxt.addWidget(QLabel(username))
@@ -276,54 +282,73 @@ class LoginWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Sign In")
-        self.setFixedSize(600,440)
+        self.setFixedSize(700, 490)
         self.setStyleSheet("""
             QWidget {
-                background:qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1, stop:0 #1b3bb2, stop:1 #000;
+                background: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1, stop:0 #1b3bb2, stop:1 #000);
             }
             QLineEdit {
-                background: #262626; color: #fff;
-                border: none; border-radius: 8px; padding: 13px; font-size:17px;
+                background: #262626;
+                color: #fff;
+                border: none;
+                border-radius: 8px;
+                padding: 13px;
+                font-size: 17px;
+                margin-bottom: 14px;
             }
             QLabel#logo {
-                color:#fff; font-family:Arial Black; font-size:36px; margin-bottom:17px;
+                color: #fff;
+                font-family: Arial Black;
+                font-size: 41px;
+                margin-bottom: 17px;
+                letter-spacing: 4px;
             }
             QLabel, QPushButton {color:white;}
             QPushButton {
-                background: #3a3a3a; border-radius:8px; font-size:16px;
-                padding:11px 0; margin-left:2px; margin-right:2px;
+                background: #3a3a3a;
+                border-radius: 8px;
+                font-size: 16px;
+                padding: 14px 0;
+                margin: 12px 13px 0 0;
             }
             QPushButton:hover {background:#2049c2;}
         """)
+
         layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        lbl = QLabel("Sign In")
-        lbl.setStyleSheet("color:white; font-size: 19px; margin-top:22px; margin-bottom:4px;")
-        layout.addWidget(lbl)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        layout.addSpacing(30)
+
         logo = QLabel("Messenger")
         logo.setObjectName("logo")
-        logo.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(logo)
+
         self.username_input = QLineEdit()
         self.username_input.setPlaceholderText("Username")
+        layout.addWidget(self.username_input)
         self.password_input = QLineEdit()
         self.password_input.setPlaceholderText("Password")
         self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        layout.addWidget(self.username_input)
         layout.addWidget(self.password_input)
+
         rowbtn = QHBoxLayout()
+        rowbtn.setAlignment(Qt.AlignmentFlag.AlignCenter)
         signin_btn = QPushButton("Sign In")
         signup_btn = QPushButton("Go to Sign Up")
+        signin_btn.setFixedWidth(180)
+        signup_btn.setFixedWidth(180)
         signin_btn.clicked.connect(self.handle_signin)
         signup_btn.clicked.connect(self.goto_signup)
         rowbtn.addWidget(signin_btn)
         rowbtn.addWidget(signup_btn)
         layout.addLayout(rowbtn)
         layout.addStretch()
+
         hdi_lbl = QLabel("HDI")
-        hdi_lbl.setStyleSheet("font-family:Arial Black;font-size:20px;color:#fff;")
+        hdi_lbl.setStyleSheet("font-family:Arial Black;font-size:22px;color:#fff;margin:0px 25px 14px 0;")
         hdi_lbl.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
         layout.addWidget(hdi_lbl)
+
     def handle_signin(self):
         username = self.username_input.text().strip()
         password = self.password_input.text().strip()
@@ -339,6 +364,7 @@ class LoginWindow(QWidget):
             self.close()
         except Exception as e:
             QMessageBox.critical(self, "Connection Failed", str(e))
+
     def goto_signup(self):
         self.signupwindow = SignupWindow()
         self.signupwindow.show()
